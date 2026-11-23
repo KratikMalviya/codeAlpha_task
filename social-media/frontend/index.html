@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Feed · Vibe</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<!-- Navbar -->
+<nav class="navbar">
+  <div class="nav-inner">
+    <a href="/" class="nav-logo">⚡ Vibe</a>
+    <div class="nav-links">
+      <a href="/" class="nav-link">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+        <span>Home</span>
+      </a>
+      <a href="/explore.html" class="nav-link">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        <span>Explore</span>
+      </a>
+      <a href="/profile.html" class="nav-link">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+        <span>Profile</span>
+      </a>
+    </div>
+    <div class="nav-user">
+      <span id="navUserName"></span>
+      <div id="navAvatar"></div>
+      <button class="btn-logout" onclick="logout()">Sign out</button>
+    </div>
+  </div>
+</nav>
+
+<div class="page">
+  <div class="two-col">
+    <!-- Main feed -->
+    <div class="col-main">
+      <!-- Compose -->
+      <div class="card" style="margin-bottom:16px;" id="composeCard">
+        <div class="compose">
+          <div id="composeAvatar"></div>
+          <textarea id="postContent" placeholder="What's on your mind?" maxlength="500"></textarea>
+        </div>
+        <div class="compose-actions">
+          <span class="compose-hint" id="charCount">0 / 500</span>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="text" id="imageUrl" placeholder="Image URL (optional)"
+              style="background:var(--bg3);border:1px solid var(--border);color:var(--text);
+              padding:8px 12px;border-radius:8px;font-size:.82rem;width:220px;outline:none;">
+            <button class="btn btn-primary btn-sm" id="postBtn" onclick="createPost()">Post</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="tabs">
+        <button class="tab active" onclick="switchTab('feed', this)">Following</button>
+        <button class="tab" onclick="switchTab('explore', this)">Explore</button>
+      </div>
+
+      <div id="feedContainer" class="feed">
+        <div class="loading">Loading…</div>
+      </div>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="col-side">
+      <div class="card" id="whoToFollow">
+        <div class="widget-title">Who to follow</div>
+        <div id="suggestList"><div class="loading">Loading…</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+requireAuth();
+const me = getUser();
+let activeTab = 'feed';
+
+// Set compose avatar
+document.getElementById('composeAvatar').innerHTML = avatar(me.name, 40);
+
+// Char counter
+document.getElementById('postContent').addEventListener('input', function() {
+  document.getElementById('charCount').textContent = `${this.value.length} / 500`;
+});
+
+// ── Create post ─────────────────────────────────────────────
+async function createPost() {
+  const content  = document.getElementById('postContent').value.trim();
+  const imageUrl = document.getElementById('imageUrl').value.trim();
+  if (!content) return toast('Write something first!', 'error');
+  const btn = document.getElementById('postBtn');
+  btn.disabled = true; btn.textContent = 'Posting…';
+  try {
+    const post = await apiFetch('/api/posts', { method: 'POST', body: JSON.stringify({ content, imageUrl }) });
+    document.getElementById('postContent').value = '';
+    document.getElementById('imageUrl').value = '';
+    document.getElementById('charCount').textContent = '0 / 500';
+    // Prepend to feed
+    const feed = document.getElementById('feedContainer');
+    if (feed.querySelector('.loading') || feed.querySelector('.empty')) feed.innerHTML = '';
+    feed.insertAdjacentHTML('afterbegin', renderPost(post));
+    bindPost(post.id);
+    toast('Posted!', 'success');
+  } catch(e) { toast(e.message, 'error'); }
+  btn.disabled = false; btn.textContent = 'Post';
+}
+
+// ── Load feed ───────────────────────────────────────────────
+async function loadFeed(tab) {
+  const container = document.getElementById('feedContainer');
+  container.innerHTML = '<div class="loading">Loading…</div>';
+  try {
+    const url = tab === 'feed' ? '/api/posts/feed' : '/api/posts/explore';
+    const posts = await apiFetch(url);
+    renderFeed(posts, container);
+  } catch(e) { container.innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+function switchTab(tab, btn) {
+  activeTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  loadFeed(tab);
+}
+
+function renderFeed(posts, container) {
+  if (!posts.length) {
+    container.innerHTML = `<div class="empty">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+      <p>Nothing here yet.<br>Follow people or switch to Explore!</p>
+    </div>`;
+    return;
+  }
+  container.innerHTML = posts.map(renderPost).join('');
+  posts.forEach(p => bindPost(p.id));
+}
+
+function renderPost(p) {
+  return `
+  <div class="post-card" id="post-${p.id}">
+    <div class="post-header">
+      <a href="/profile.html?id=${p.author.id}" style="display:flex;align-items:center;gap:10px;flex:1;">
+        ${avatar(p.author.name, 40)}
+        <div class="post-author">
+          <div class="name">${esc(p.author.name)}</div>
+          <div class="username">@${esc(p.author.username)}</div>
+        </div>
+      </a>
+      <span class="post-time">${timeAgo(p.createdAt)}</span>
+    </div>
+    <div class="post-content">${esc(p.content)}</div>
+    ${p.imageUrl ? `<div class="post-image"><img src="${esc(p.imageUrl)}" alt="post image" onerror="this.parentElement.style.display='none'"></div>` : ''}
+    <div class="post-actions">
+      <button class="action-btn ${p.likedByMe ? 'liked' : ''}" id="like-${p.id}" onclick="toggleLike('${p.id}', ${p.likedByMe})">
+        <svg fill="${p.likedByMe ? 'currentColor' : 'none'}" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+        <span id="likes-${p.id}">${p.likesCount}</span>
+      </button>
+      <button class="action-btn" onclick="toggleComments('${p.id}')">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+        <span id="cmts-${p.id}">${p.commentsCount}</span>
+      </button>
+      ${p.author.id === me.id ? `<button class="delete-btn" onclick="deletePost('${p.id}')">Delete</button>` : ''}
+    </div>
+    <div class="comments-wrap" id="comments-${p.id}">
+      <div class="comment-form">
+        ${avatar(me.name, 30)}
+        <input type="text" placeholder="Add a comment…" id="ci-${p.id}" onkeydown="if(event.key==='Enter')submitComment('${p.id}')">
+        <button class="btn btn-primary btn-sm" onclick="submitComment('${p.id}')">Post</button>
+      </div>
+      <div id="clist-${p.id}" style="margin-top:12px;"></div>
+    </div>
+  </div>`;
+}
+
+function bindPost(id) { /* events already inline */ }
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+// ── Like ────────────────────────────────────────────────────
+async function toggleLike(id, liked) {
+  try {
+    const data = await apiFetch(`/api/posts/${id}/like`, { method: liked ? 'DELETE' : 'POST' });
+    document.getElementById(`likes-${id}`).textContent = data.likesCount;
+    const btn = document.getElementById(`like-${id}`);
+    btn.classList.toggle('liked', !liked);
+    btn.querySelector('svg').setAttribute('fill', !liked ? 'currentColor' : 'none');
+    btn.setAttribute('onclick', `toggleLike('${id}', ${!liked})`);
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ── Delete post ─────────────────────────────────────────────
+async function deletePost(id) {
+  if (!confirm('Delete this post?')) return;
+  try {
+    await apiFetch(`/api/posts/${id}`, { method: 'DELETE' });
+    document.getElementById(`post-${id}`)?.remove();
+    toast('Post deleted', 'info');
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ── Comments ────────────────────────────────────────────────
+async function toggleComments(id) {
+  const wrap = document.getElementById(`comments-${id}`);
+  const isOpen = wrap.classList.contains('open');
+  if (isOpen) { wrap.classList.remove('open'); return; }
+  wrap.classList.add('open');
+  loadComments(id);
+}
+
+async function loadComments(postId) {
+  const list = document.getElementById(`clist-${postId}`);
+  list.innerHTML = '<div style="color:var(--text2);font-size:.82rem;">Loading…</div>';
+  try {
+    const comments = await apiFetch(`/api/comments/post/${postId}`);
+    list.innerHTML = comments.length ? comments.map(c => `
+      <div class="comment-item">
+        ${avatar(c.author.name, 30)}
+        <div class="comment-body">
+          <strong style="font-size:.88rem;">${esc(c.author.name)}</strong>
+          <span style="color:var(--text2);font-size:.82rem;margin-left:6px;">@${esc(c.author.username)}</span>
+          <div style="font-size:.9rem;margin-top:3px;">${esc(c.content)}</div>
+          <div class="comment-meta">
+            ${timeAgo(c.createdAt)}
+            ${c.isOwn ? `<button class="btn-danger btn-sm" onclick="deleteComment('${c.id}','${postId}')">Delete</button>` : ''}
+          </div>
+        </div>
+      </div>`).join('') : '<div style="color:var(--text2);font-size:.85rem;">No comments yet.</div>';
+  } catch(e) { list.innerHTML = `<div style="color:#ef4444;font-size:.82rem;">${e.message}</div>`; }
+}
+
+async function submitComment(postId) {
+  const input = document.getElementById(`ci-${postId}`);
+  const content = input.value.trim();
+  if (!content) return;
+  try {
+    const c = await apiFetch(`/api/comments/post/${postId}`, { method: 'POST', body: JSON.stringify({ content }) });
+    input.value = '';
+    const count = document.getElementById(`cmts-${postId}`);
+    count.textContent = parseInt(count.textContent) + 1;
+    loadComments(postId);
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function deleteComment(commentId, postId) {
+  try {
+    await apiFetch(`/api/comments/${commentId}`, { method: 'DELETE' });
+    const count = document.getElementById(`cmts-${postId}`);
+    count.textContent = Math.max(0, parseInt(count.textContent) - 1);
+    loadComments(postId);
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ── Who to follow ───────────────────────────────────────────
+async function loadSuggestions() {
+  try {
+    const follows = await apiFetch('/api/users/me');
+    const all = await apiFetch('/api/posts/explore');
+    const seen = new Set();
+    const suggestions = [];
+    all.forEach(p => {
+      if (!seen.has(p.author.id) && p.author.id !== me.id) {
+        seen.add(p.author.id); suggestions.push(p.author);
+      }
+    });
+    const list = document.getElementById('suggestList');
+    if (!suggestions.length) { list.innerHTML = '<div style="color:var(--text2);font-size:.85rem;">Nothing to suggest yet.</div>'; return; }
+    list.innerHTML = suggestions.slice(0, 5).map(u => `
+      <div class="user-row">
+        <a href="/profile.html?id=${u.id}">${avatar(u.name, 36)}</a>
+        <div class="user-row-info">
+          <div class="name"><a href="/profile.html?id=${u.id}" style="color:var(--text)">${esc(u.name)}</a></div>
+          <div class="username">@${esc(u.username)}</div>
+        </div>
+        <button class="btn-follow btn-sm" id="sf-${u.id}" onclick="quickFollow('${u.id}', this)">Follow</button>
+      </div>`).join('');
+  } catch(e) {}
+}
+
+async function quickFollow(id, btn) {
+  try {
+    await apiFetch(`/api/users/${id}/follow`, { method: 'POST' });
+    btn.textContent = 'Following'; btn.classList.add('following');
+    btn.onclick = async () => {
+      await apiFetch(`/api/users/${id}/follow`, { method: 'DELETE' });
+      btn.textContent = 'Follow'; btn.classList.remove('following');
+      btn.onclick = () => quickFollow(id, btn);
+    };
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+loadFeed('feed');
+loadSuggestions();
+</script>
+</body>
+</html>

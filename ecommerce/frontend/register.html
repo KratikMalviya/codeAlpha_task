@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Register - ShopZone</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-container">
+      <a href="/" class="logo"><i class="fas fa-shopping-bag"></i> ShopZone</a>
+      <div class="nav-links">
+        <a href="/" class="nav-link"><i class="fas fa-home"></i> Home</a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="auth-container">
+    <div class="auth-card">
+      <div class="auth-header">
+        <i class="fas fa-user-plus"></i>
+        <h2>Create Account</h2>
+        <p>Join ShopZone today!</p>
+      </div>
+
+      <form id="registerForm" onsubmit="handleRegister(event)">
+        <div class="form-group">
+          <label><i class="fas fa-user"></i> Full Name</label>
+          <input type="text" id="name" placeholder="John Doe" required minlength="2">
+        </div>
+        <div class="form-group">
+          <label><i class="fas fa-envelope"></i> Email</label>
+          <input type="email" id="email" placeholder="your@email.com" required>
+        </div>
+        <div class="form-group">
+          <label><i class="fas fa-lock"></i> Password</label>
+          <div class="password-field">
+            <input type="password" id="password" placeholder="Minimum 6 characters" required minlength="6">
+            <button type="button" onclick="togglePassword('password', 'eye1')"><i class="fas fa-eye" id="eye1"></i></button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label><i class="fas fa-lock"></i> Confirm Password</label>
+          <div class="password-field">
+            <input type="password" id="confirmPassword" placeholder="Repeat your password" required>
+            <button type="button" onclick="togglePassword('confirmPassword', 'eye2')"><i class="fas fa-eye" id="eye2"></i></button>
+          </div>
+        </div>
+        <button type="submit" class="btn-auth" id="submitBtn">
+          <i class="fas fa-user-plus"></i> Create Account
+        </button>
+      </form>
+
+      <p class="auth-switch">Already have an account? <a href="/login.html">Login here</a></p>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="/js/auth.js"></script>
+  <script>
+    if (localStorage.getItem('token')) window.location.href = '/';
+
+    async function handleRegister(e) {
+      e.preventDefault();
+      const name = document.getElementById('name').value;
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+      const confirm = document.getElementById('confirmPassword').value;
+
+      if (password !== confirm) { showToast('Passwords do not match', 'error'); return; }
+
+      const btn = document.getElementById('submitBtn');
+      btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating account...';
+
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password })
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        showToast('Account created! Redirecting...', 'success');
+        setTimeout(() => window.location.href = '/', 1000);
+      } else {
+        showToast(data.error, 'error');
+        btn.disabled = false; btn.innerHTML = '<i class="fas fa-user-plus"></i> Create Account';
+      }
+    }
+
+    function togglePassword(id, iconId) {
+      const input = document.getElementById(id);
+      const icon = document.getElementById(iconId);
+      if (input.type === 'password') { input.type = 'text'; icon.className = 'fas fa-eye-slash'; }
+      else { input.type = 'password'; icon.className = 'fas fa-eye'; }
+    }
+  </script>
+</body>
+</html>

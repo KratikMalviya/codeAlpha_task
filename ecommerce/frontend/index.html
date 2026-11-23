@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ShopZone - Your Online Store</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body>
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="nav-container">
+      <a href="/" class="logo"><i class="fas fa-shopping-bag"></i> ShopZone</a>
+      <div class="nav-search">
+        <input type="text" id="searchInput" placeholder="Search products...">
+        <button onclick="searchProducts()"><i class="fas fa-search"></i></button>
+      </div>
+      <div class="nav-links">
+        <a href="/" class="nav-link active"><i class="fas fa-home"></i> Home</a>
+        <a href="/cart.html" class="nav-link"><i class="fas fa-shopping-cart"></i> Cart <span class="cart-badge" id="cartBadge">0</span></a>
+        <a href="/orders.html" class="nav-link" id="ordersLink" style="display:none"><i class="fas fa-box"></i> Orders</a>
+        <a href="/login.html" class="nav-link" id="loginLink"><i class="fas fa-sign-in-alt"></i> Login</a>
+        <div class="user-menu" id="userMenu" style="display:none">
+          <span id="userName"><i class="fas fa-user"></i> </span>
+          <button class="btn-logout" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Logout</button>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="hero-content">
+      <h1>Welcome to <span>ShopZone</span></h1>
+      <p>Discover amazing products at unbeatable prices</p>
+      <a href="#products" class="btn-hero">Shop Now <i class="fas fa-arrow-right"></i></a>
+    </div>
+  </section>
+
+  <!-- Filters -->
+  <section class="filters-section" id="products">
+    <div class="container">
+      <div class="filters">
+        <div class="category-filters" id="categoryFilters">
+          <button class="filter-btn active" onclick="filterByCategory('All', this)">All</button>
+        </div>
+        <select id="sortSelect" onchange="applySort()">
+          <option value="">Sort by</option>
+          <option value="price_asc">Price: Low to High</option>
+          <option value="price_desc">Price: High to Low</option>
+        </select>
+      </div>
+    </div>
+  </section>
+
+  <!-- Products Grid -->
+  <section class="products-section">
+    <div class="container">
+      <h2 class="section-title">Our Products</h2>
+      <div class="products-grid" id="productsGrid">
+        <div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading products...</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Toast Notification -->
+  <div class="toast" id="toast"></div>
+
+  <script src="/js/auth.js"></script>
+  <script src="/js/main.js"></script>
+  <script>
+    let currentCategory = 'All';
+    let currentSort = '';
+
+    async function loadCategories() {
+      const res = await fetch('/api/products/categories');
+      const categories = await res.json();
+      const container = document.getElementById('categoryFilters');
+      categories.forEach(cat => {
+        const btn = document.createElement('button');
+        btn.className = 'filter-btn';
+        btn.textContent = cat;
+        btn.onclick = () => filterByCategory(cat, btn);
+        container.appendChild(btn);
+      });
+    }
+
+    async function loadProducts(search = '', category = 'All', sort = '') {
+      const grid = document.getElementById('productsGrid');
+      grid.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
+      let url = `/api/products?search=${search}&sort=${sort}`;
+      if (category !== 'All') url += `&category=${category}`;
+      const res = await fetch(url);
+      const products = await res.json();
+      renderProducts(products);
+    }
+
+    function renderProducts(products) {
+      const grid = document.getElementById('productsGrid');
+      if (!products.length) {
+        grid.innerHTML = '<div class="no-products"><i class="fas fa-box-open"></i><p>No products found</p></div>';
+        return;
+      }
+      grid.innerHTML = products.map(p => `
+        <div class="product-card" onclick="goToProduct(${p.id})">
+          <div class="product-image">
+            <img src="${p.image_url}" alt="${p.name}" onerror="this.src='https://via.placeholder.com/400x300?text=No+Image'">
+            ${p.stock < 10 ? `<span class="stock-badge">${p.stock === 0 ? 'Out of Stock' : 'Low Stock'}</span>` : ''}
+          </div>
+          <div class="product-info">
+            <span class="product-category">${p.category}</span>
+            <h3>${p.name}</h3>
+            <p>${p.description ? p.description.substring(0, 80) + '...' : ''}</p>
+            <div class="product-footer">
+              <span class="price">₹${p.price.toLocaleString('en-IN')}</span>
+              <button class="btn-add-cart" onclick="event.stopPropagation(); addToCart(${p.id})" ${p.stock === 0 ? 'disabled' : ''}>
+                <i class="fas fa-cart-plus"></i> Add to Cart
+              </button>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function goToProduct(id) {
+      window.location.href = `/product.html?id=${id}`;
+    }
+
+    function filterByCategory(cat, btn) {
+      currentCategory = cat;
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      loadProducts(document.getElementById('searchInput').value, cat, currentSort);
+    }
+
+    function searchProducts() {
+      loadProducts(document.getElementById('searchInput').value, currentCategory, currentSort);
+    }
+
+    function applySort() {
+      currentSort = document.getElementById('sortSelect').value;
+      loadProducts(document.getElementById('searchInput').value, currentCategory, currentSort);
+    }
+
+    document.getElementById('searchInput').addEventListener('keyup', e => {
+      if (e.key === 'Enter') searchProducts();
+    });
+
+    async function addToCart(productId) {
+      const token = localStorage.getItem('token');
+      if (!token) { showToast('Please login to add items to cart', 'error'); window.location.href='/login.html'; return; }
+      const res = await fetch('/api/cart', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ product_id: productId, quantity: 1 })
+      });
+      const data = await res.json();
+      if (res.ok) { showToast('Added to cart!', 'success'); updateCartBadge(); }
+      else showToast(data.error, 'error');
+    }
+
+    loadCategories();
+    loadProducts();
+  </script>
+</body>
+</html>

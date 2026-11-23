@@ -1,0 +1,20 @@
+# Ignore node_modules for all projects
+**/node_modules/
+
+# Ignore database files (NeDB)
+**/*.db
+
+# Ignore environment files
+**/.env
+
+# Logs
+**/*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor directories
+.vscode/
+.idea/

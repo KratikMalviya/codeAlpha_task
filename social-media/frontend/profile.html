@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Profile · Vibe</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<nav class="navbar">
+  <div class="nav-inner">
+    <a href="/" class="nav-logo">⚡ Vibe</a>
+    <div class="nav-links">
+      <a href="/" class="nav-link"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg><span>Home</span></a>
+      <a href="/explore.html" class="nav-link"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg><span>Explore</span></a>
+      <a href="/profile.html" class="nav-link"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg><span>Profile</span></a>
+    </div>
+    <div class="nav-user">
+      <div id="navAvatar"></div>
+      <button class="btn-logout" onclick="logout()">Sign out</button>
+    </div>
+  </div>
+</nav>
+
+<!-- Edit Profile Modal -->
+<div class="modal-backdrop" id="editModal" style="display:none;">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Edit Profile</span>
+      <button class="modal-close" onclick="document.getElementById('editModal').style.display='none'">✕</button>
+    </div>
+    <div class="form-group"><label>Name</label><input type="text" id="editName" maxlength="50"></div>
+    <div class="form-group"><label>Bio</label><input type="text" id="editBio" maxlength="200" placeholder="Tell people about yourself…"></div>
+    <button class="btn btn-primary" style="width:100%;margin-top:8px;" onclick="saveProfile()">Save Changes</button>
+  </div>
+</div>
+
+<div class="page" style="max-width:720px;">
+  <div id="profileHeader"><div class="loading">Loading…</div></div>
+
+  <div style="margin-top:24px;">
+    <div class="tabs">
+      <button class="tab active" id="tabPosts" onclick="switchTab('posts',this)">Posts</button>
+      <button class="tab" id="tabFollowers" onclick="switchTab('followers',this)">Followers</button>
+      <button class="tab" id="tabFollowing" onclick="switchTab('following',this)">Following</button>
+    </div>
+    <div id="tabContent" class="feed"><div class="loading">Loading…</div></div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+requireAuth();
+const me = getUser();
+const params = new URLSearchParams(location.search);
+const profileId = params.get('id') || me.id;
+const isOwnProfile = profileId === me.id;
+let profileUser = null;
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+// ── Load profile header ─────────────────────────────────────
+async function loadProfile() {
+  try {
+    const url = isOwnProfile ? '/api/users/me' : `/api/users/${profileId}`;
+    profileUser = await apiFetch(url);
+    document.title = `${profileUser.name} · Vibe`;
+
+    document.getElementById('profileHeader').innerHTML = `
+      <div style="border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
+        <div class="profile-banner"></div>
+        <div style="padding:16px 24px 24px;">
+          <div class="profile-info">
+            <div class="avatar-wrap">${avatar(profileUser.name, 72)}</div>
+            <div class="profile-details">
+              <div class="profile-name">${esc(profileUser.name)}</div>
+              <div class="profile-username">@${esc(profileUser.username)}</div>
+              ${profileUser.bio ? `<div class="profile-bio">${esc(profileUser.bio)}</div>` : ''}
+            </div>
+            <div>
+              ${isOwnProfile
+                ? `<button class="btn btn-outline btn-sm" onclick="openEdit()">Edit Profile</button>`
+                : `<button class="btn-follow ${profileUser.isFollowing?'following':''}" id="followBtn"
+                    onclick="toggleFollow()">
+                    ${profileUser.isFollowing ? 'Following' : 'Follow'}
+                   </button>`}
+            </div>
+          </div>
+          <div class="profile-stats">
+            <span onclick="switchTab('posts', document.getElementById('tabPosts'))"><strong>${profileUser.posts ?? 0}</strong> Posts</span>
+            <span onclick="switchTab('followers', document.getElementById('tabFollowers'))"><strong id="followerCount">${profileUser.followers ?? 0}</strong> Followers</span>
+            <span onclick="switchTab('following', document.getElementById('tabFollowing'))"><strong>${profileUser.following ?? 0}</strong> Following</span>
+          </div>
+        </div>
+      </div>`;
+  } catch(e) {
+    document.getElementById('profileHeader').innerHTML = `<div class="empty">${e.message}</div>`;
+  }
+}
+
+// ── Follow toggle ───────────────────────────────────────────
+async function toggleFollow() {
+  const btn = document.getElementById('followBtn');
+  const isFollowing = btn.classList.contains('following');
+  try {
+    await apiFetch(`/api/users/${profileId}/follow`, { method: isFollowing ? 'DELETE' : 'POST' });
+    btn.classList.toggle('following', !isFollowing);
+    btn.textContent = isFollowing ? 'Follow' : 'Following';
+    const countEl = document.getElementById('followerCount');
+    if (countEl) countEl.textContent = parseInt(countEl.textContent) + (isFollowing ? -1 : 1);
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ── Tabs ────────────────────────────────────────────────────
+async function switchTab(tab, btn) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  const c = document.getElementById('tabContent');
+  c.innerHTML = '<div class="loading">Loading…</div>';
+
+  if (tab === 'posts') {
+    try {
+      const posts = await apiFetch(`/api/posts/user/${profileId}`);
+      if (!posts.length) { c.innerHTML = '<div class="empty"><p>No posts yet.</p></div>'; return; }
+      c.innerHTML = posts.map(p => `
+        <div class="post-card" id="post-${p.id}">
+          <div class="post-header">
+            <div style="display:flex;align-items:center;gap:10px;flex:1;">
+              ${avatar(p.author.name, 40)}
+              <div class="post-author">
+                <div class="name">${esc(p.author.name)}</div>
+                <div class="username">@${esc(p.author.username)}</div>
+              </div>
+            </div>
+            <span class="post-time">${timeAgo(p.createdAt)}</span>
+          </div>
+          <div class="post-content">${esc(p.content)}</div>
+          ${p.imageUrl ? `<div class="post-image"><img src="${esc(p.imageUrl)}" onerror="this.parentElement.style.display='none'"></div>` : ''}
+          <div class="post-actions">
+            <button class="action-btn ${p.likedByMe?'liked':''}" id="like-${p.id}" onclick="toggleLike('${p.id}',${p.likedByMe})">
+              <svg fill="${p.likedByMe?'currentColor':'none'}" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+              <span id="likes-${p.id}">${p.likesCount}</span>
+            </button>
+            <span class="action-btn">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+              ${p.commentsCount}
+            </span>
+            ${p.author.id === me.id ? `<button class="delete-btn" onclick="deletePost('${p.id}')">Delete</button>` : ''}
+          </div>
+        </div>`).join('');
+    } catch(e) { c.innerHTML = `<div class="empty">${e.message}</div>`; }
+  }
+
+  else if (tab === 'followers' || tab === 'following') {
+    try {
+      const users = await apiFetch(`/api/users/${profileId}/${tab}`);
+      if (!users.length) { c.innerHTML = `<div class="empty"><p>No ${tab} yet.</p></div>`; return; }
+      c.innerHTML = `<div class="card"><div>` + users.map(u => `
+        <div class="user-row">
+          <a href="/profile.html?id=${u.id}">${avatar(u.name, 44)}</a>
+          <div class="user-row-info">
+            <div class="name"><a href="/profile.html?id=${u.id}" style="color:var(--text)">${esc(u.name)}</a></div>
+            <div class="username">@${esc(u.username)}</div>
+            ${u.bio ? `<div style="font-size:.8rem;color:var(--text2);margin-top:2px;">${esc(u.bio)}</div>` : ''}
+          </div>
+        </div>`).join('') + `</div></div>`;
+    } catch(e) { c.innerHTML = `<div class="empty">${e.message}</div>`; }
+  }
+}
+
+async function toggleLike(id, liked) {
+  try {
+    const data = await apiFetch(`/api/posts/${id}/like`, { method: liked?'DELETE':'POST' });
+    document.getElementById(`likes-${id}`).textContent = data.likesCount;
+    const btn = document.getElementById(`like-${id}`);
+    btn.classList.toggle('liked', !liked);
+    btn.querySelector('svg').setAttribute('fill', !liked?'currentColor':'none');
+    btn.setAttribute('onclick', `toggleLike('${id}',${!liked})`);
+  } catch(e) { toast(e.message,'error'); }
+}
+
+async function deletePost(id) {
+  if (!confirm('Delete this post?')) return;
+  try {
+    await apiFetch(`/api/posts/${id}`, { method: 'DELETE' });
+    document.getElementById(`post-${id}`)?.remove();
+    toast('Post deleted','info');
+  } catch(e) { toast(e.message,'error'); }
+}
+
+// ── Edit profile ────────────────────────────────────────────
+function openEdit() {
+  document.getElementById('editName').value = profileUser.name || '';
+  document.getElementById('editBio').value  = profileUser.bio  || '';
+  document.getElementById('editModal').style.display = 'flex';
+}
+
+async function saveProfile() {
+  try {
+    const updated = await apiFetch('/api/users/profile', {
+      method: 'PUT',
+      body: JSON.stringify({
+        name: document.getElementById('editName').value.trim(),
+        bio:  document.getElementById('editBio').value.trim(),
+      })
+    });
+    // Update localStorage
+    const u = getUser(); u.name = updated.name;
+    setSession(getToken(), u);
+    document.getElementById('editModal').style.display = 'none';
+    toast('Profile updated!', 'success');
+    loadProfile();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+loadProfile().then(() => switchTab('posts', document.getElementById('tabPosts')));
+</script>
+</body>
+</html>

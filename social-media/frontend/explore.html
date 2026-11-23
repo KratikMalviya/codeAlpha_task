@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Explore · Vibe</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<nav class="navbar">
+  <div class="nav-inner">
+    <a href="/" class="nav-logo">⚡ Vibe</a>
+    <div class="nav-links">
+      <a href="/" class="nav-link"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg><span>Home</span></a>
+      <a href="/explore.html" class="nav-link"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg><span>Explore</span></a>
+      <a href="/profile.html" class="nav-link"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg><span>Profile</span></a>
+    </div>
+    <div class="nav-search-wrap">
+      <svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width:16px;height:16px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+      <input type="text" id="searchInput" placeholder="Search people…" oninput="searchUsers(this.value)">
+    </div>
+    <div class="nav-user">
+      <div id="navAvatar"></div>
+      <button class="btn-logout" onclick="logout()">Sign out</button>
+    </div>
+  </div>
+</nav>
+
+<!-- Search results dropdown -->
+<div id="searchResults" style="display:none;position:fixed;top:66px;right:20px;z-index:150;
+  background:var(--bg2);border:1px solid var(--border);border-radius:12px;width:280px;padding:8px;
+  box-shadow:var(--shadow);"></div>
+
+<div class="page" style="max-width:700px;">
+  <div class="tabs" style="margin-bottom:20px;">
+    <button class="tab active" onclick="switchTab('posts',this)">Posts</button>
+    <button class="tab" onclick="switchTab('people',this)">People</button>
+  </div>
+  <div id="container" class="feed"><div class="loading">Loading…</div></div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+requireAuth();
+const me = getUser();
+let currentTab = 'posts';
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+async function switchTab(tab, btn) {
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  if (tab === 'posts') loadExplorePosts();
+  else loadPeople();
+}
+
+// ── Posts ───────────────────────────────────────────────────
+async function loadExplorePosts() {
+  const c = document.getElementById('container');
+  c.innerHTML = '<div class="loading">Loading…</div>';
+  try {
+    const posts = await apiFetch('/api/posts/explore');
+    if (!posts.length) { c.innerHTML = '<div class="empty"><p>No posts yet. Be the first!</p></div>'; return; }
+    c.innerHTML = posts.map(p => `
+      <div class="post-card" id="post-${p.id}">
+        <div class="post-header">
+          <a href="/profile.html?id=${p.author.id}" style="display:flex;align-items:center;gap:10px;flex:1;">
+            ${avatar(p.author.name, 40)}
+            <div class="post-author">
+              <div class="name">${esc(p.author.name)}</div>
+              <div class="username">@${esc(p.author.username)}</div>
+            </div>
+          </a>
+          <span class="post-time">${timeAgo(p.createdAt)}</span>
+        </div>
+        <div class="post-content">${esc(p.content)}</div>
+        ${p.imageUrl ? `<div class="post-image"><img src="${esc(p.imageUrl)}" onerror="this.parentElement.style.display='none'"></div>` : ''}
+        <div class="post-actions">
+          <button class="action-btn ${p.likedByMe?'liked':''}" id="like-${p.id}" onclick="toggleLike('${p.id}',${p.likedByMe})">
+            <svg fill="${p.likedByMe?'currentColor':'none'}" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+            <span id="likes-${p.id}">${p.likesCount}</span>
+          </button>
+          <span class="action-btn">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+            ${p.commentsCount}
+          </span>
+        </div>
+      </div>`).join('');
+  } catch(e) { c.innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+async function toggleLike(id, liked) {
+  try {
+    const data = await apiFetch(`/api/posts/${id}/like`, { method: liked?'DELETE':'POST' });
+    document.getElementById(`likes-${id}`).textContent = data.likesCount;
+    const btn = document.getElementById(`like-${id}`);
+    btn.classList.toggle('liked', !liked);
+    btn.querySelector('svg').setAttribute('fill', !liked ? 'currentColor' : 'none');
+    btn.setAttribute('onclick', `toggleLike('${id}',${!liked})`);
+  } catch(e) { toast(e.message,'error'); }
+}
+
+// ── People ──────────────────────────────────────────────────
+async function loadPeople() {
+  const c = document.getElementById('container');
+  c.innerHTML = '<div class="loading">Loading…</div>';
+  try {
+    const posts = await apiFetch('/api/posts/explore');
+    const seen = new Set(); const people = [];
+    posts.forEach(p => { if (!seen.has(p.author.id)) { seen.add(p.author.id); people.push(p.author); }});
+    if (!people.length) { c.innerHTML = '<div class="empty"><p>No users found</p></div>'; return; }
+    c.innerHTML = `<div class="card"><div style="display:flex;flex-direction:column;gap:4px;">` +
+      people.map(u => `
+        <div class="user-row">
+          <a href="/profile.html?id=${u.id}">${avatar(u.name, 44)}</a>
+          <div class="user-row-info">
+            <div class="name"><a href="/profile.html?id=${u.id}" style="color:var(--text)">${esc(u.name)}</a></div>
+            <div class="username">@${esc(u.username)}</div>
+          </div>
+          ${u.id !== me.id ? `<button class="btn-follow btn-sm" id="pf-${u.id}" onclick="toggleFollow('${u.id}',this)">Follow</button>` : '<span style="color:var(--text2);font-size:.8rem;">You</span>'}
+        </div>`).join('') + `</div></div>`;
+  } catch(e) { c.innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+async function toggleFollow(id, btn) {
+  const isFollowing = btn.classList.contains('following');
+  try {
+    await apiFetch(`/api/users/${id}/follow`, { method: isFollowing ? 'DELETE' : 'POST' });
+    btn.classList.toggle('following', !isFollowing);
+    btn.textContent = isFollowing ? 'Follow' : 'Following';
+  } catch(e) { toast(e.message,'error'); }
+}
+
+// ── Search users ────────────────────────────────────────────
+let searchTimer;
+async function searchUsers(q) {
+  clearTimeout(searchTimer);
+  const results = document.getElementById('searchResults');
+  if (!q.trim()) { results.style.display = 'none'; return; }
+  searchTimer = setTimeout(async () => {
+    try {
+      const users = await apiFetch(`/api/users/search?q=${encodeURIComponent(q)}`);
+      if (!users.length) { results.style.display = 'none'; return; }
+      results.style.display = 'block';
+      results.innerHTML = users.map(u => `
+        <a href="/profile.html?id=${u.id}" style="display:flex;align-items:center;gap:10px;padding:8px;border-radius:8px;transition:.2s;" 
+           onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background='none'">
+          ${avatar(u.name, 34)}
+          <div>
+            <div style="font-weight:600;font-size:.9rem;">${esc(u.name)}</div>
+            <div style="color:var(--text2);font-size:.8rem;">@${esc(u.username)}</div>
+          </div>
+        </a>`).join('');
+    } catch(e) {}
+  }, 300);
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('#searchResults') && !e.target.closest('#searchInput'))
+    document.getElementById('searchResults').style.display = 'none';
+});
+
+loadExplorePosts();
+</script>
+</body>
+</html>

@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - ShopZone</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-container">
+      <a href="/" class="logo"><i class="fas fa-shopping-bag"></i> ShopZone</a>
+      <div class="nav-links">
+        <a href="/" class="nav-link"><i class="fas fa-home"></i> Home</a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="auth-container">
+    <div class="auth-card">
+      <div class="auth-header">
+        <i class="fas fa-user-circle"></i>
+        <h2>Welcome Back!</h2>
+        <p>Sign in to your account</p>
+      </div>
+
+      <form id="loginForm" onsubmit="handleLogin(event)">
+        <div class="form-group">
+          <label><i class="fas fa-envelope"></i> Email</label>
+          <input type="email" id="email" placeholder="your@email.com" required>
+        </div>
+        <div class="form-group">
+          <label><i class="fas fa-lock"></i> Password</label>
+          <div class="password-field">
+            <input type="password" id="password" placeholder="Enter your password" required>
+            <button type="button" onclick="togglePassword('password')"><i class="fas fa-eye" id="eyeIcon"></i></button>
+          </div>
+        </div>
+        <button type="submit" class="btn-auth" id="submitBtn">
+          <i class="fas fa-sign-in-alt"></i> Login
+        </button>
+      </form>
+
+      <p class="auth-switch">Don't have an account? <a href="/register.html">Register here</a></p>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="/js/auth.js"></script>
+  <script>
+    // Redirect if already logged in
+    if (localStorage.getItem('token')) window.location.href = '/';
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      const btn = document.getElementById('submitBtn');
+      btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging in...';
+
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: document.getElementById('email').value, password: document.getElementById('password').value })
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        showToast('Login successful! Redirecting...', 'success');
+        setTimeout(() => window.location.href = '/', 1000);
+      } else {
+        showToast(data.error, 'error');
+        btn.disabled = false; btn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Login';
+      }
+    }
+
+    function togglePassword(id) {
+      const input = document.getElementById(id);
+      const icon = document.getElementById('eyeIcon');
+      if (input.type === 'password') { input.type = 'text'; icon.className = 'fas fa-eye-slash'; }
+      else { input.type = 'password'; icon.className = 'fas fa-eye'; }
+    }
+  </script>
+</body>
+</html>

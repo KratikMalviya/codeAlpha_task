@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Orders - ShopZone</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-container">
+      <a href="/" class="logo"><i class="fas fa-shopping-bag"></i> ShopZone</a>
+      <div class="nav-links">
+        <a href="/" class="nav-link"><i class="fas fa-home"></i> Home</a>
+        <a href="/cart.html" class="nav-link"><i class="fas fa-shopping-cart"></i> Cart <span class="cart-badge" id="cartBadge">0</span></a>
+        <a href="/orders.html" class="nav-link active" id="ordersLink"><i class="fas fa-box"></i> Orders</a>
+        <a href="/login.html" class="nav-link" id="loginLink" style="display:none"><i class="fas fa-sign-in-alt"></i> Login</a>
+        <div class="user-menu" id="userMenu" style="display:none">
+          <span id="userName"><i class="fas fa-user"></i> </span>
+          <button class="btn-logout" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Logout</button>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container" style="padding-top:30px">
+    <h1 class="page-title"><i class="fas fa-box"></i> My Orders</h1>
+    <div id="ordersContainer">
+      <div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading orders...</div>
+    </div>
+  </div>
+
+  <!-- Order Detail Modal -->
+  <div class="modal-overlay" id="orderModal" style="display:none">
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <h2><i class="fas fa-receipt"></i> Order Details</h2>
+        <button onclick="document.getElementById('orderModal').style.display='none'"><i class="fas fa-times"></i></button>
+      </div>
+      <div id="orderDetail"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="/js/auth.js"></script>
+  <script src="/js/main.js"></script>
+  <script>
+    const token = localStorage.getItem('token');
+    if (!token) window.location.href = '/login.html';
+
+    const statusColors = { pending: '#f39c12', processing: '#3498db', shipped: '#9b59b6', delivered: '#27ae60', cancelled: '#e74c3c' };
+    const statusIcons = { pending: 'fa-clock', processing: 'fa-cog', shipped: 'fa-truck', delivered: 'fa-check-circle', cancelled: 'fa-times-circle' };
+
+    async function loadOrders() {
+      const res = await fetch('/api/orders', { headers: { 'Authorization': `Bearer ${token}` } });
+      const orders = await res.json();
+      const container = document.getElementById('ordersContainer');
+
+      if (!orders.length) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <i class="fas fa-box-open"></i>
+            <h3>No orders yet</h3>
+            <p>Start shopping to place your first order!</p>
+            <a href="/" class="btn-auth"><i class="fas fa-shopping-bag"></i> Shop Now</a>
+          </div>`;
+        return;
+      }
+
+      container.innerHTML = orders.map(o => `
+        <div class="order-card" onclick="viewOrder(${o.id})">
+          <div class="order-header">
+            <div>
+              <span class="order-id">Order #${o.id}</span>
+              <span class="order-date">${new Date(o.created_at).toLocaleDateString('en-IN', { year:'numeric', month:'short', day:'numeric' })}</span>
+            </div>
+            <span class="order-status" style="background:${statusColors[o.status] || '#999'}">
+              <i class="fas ${statusIcons[o.status] || 'fa-question'}"></i> ${o.status.charAt(0).toUpperCase() + o.status.slice(1)}
+            </span>
+          </div>
+          <div class="order-body">
+            <span><i class="fas fa-box"></i> ${o.item_count} item${o.item_count > 1 ? 's' : ''}</span>
+            <span class="order-total"><i class="fas fa-rupee-sign"></i> ${o.total_amount.toLocaleString('en-IN')}</span>
+          </div>
+          <div class="order-footer">
+            <span class="view-details">View Details <i class="fas fa-chevron-right"></i></span>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function viewOrder(id) {
+      const res = await fetch(`/api/orders/${id}`, { headers: { 'Authorization': `Bearer ${token}` } });
+      const order = await res.json();
+
+      document.getElementById('orderDetail').innerHTML = `
+        <div class="order-detail-grid">
+          <div class="order-info-section">
+            <h4><i class="fas fa-info-circle"></i> Order Info</h4>
+            <p><strong>Order ID:</strong> #${order.id}</p>
+            <p><strong>Date:</strong> ${new Date(order.created_at).toLocaleString('en-IN')}</p>
+            <p><strong>Status:</strong> <span style="color:${statusColors[order.status]}">${order.status}</span></p>
+            <p><strong>Total:</strong> ₹${order.total_amount.toLocaleString('en-IN')}</p>
+          </div>
+          <div class="order-info-section">
+            <h4><i class="fas fa-map-marker-alt"></i> Shipping Address</h4>
+            <p>${order.shipping_address}</p>
+          </div>
+        </div>
+        <h4 style="margin:20px 0 10px"><i class="fas fa-box"></i> Items Ordered</h4>
+        <div class="order-items-list">
+          ${order.items.map(item => `
+            <div class="order-item-row">
+              <img src="${item.image_url}" alt="${item.name}" onerror="this.src='https://via.placeholder.com/60x60'">
+              <div class="order-item-info">
+                <h4>${item.name}</h4>
+                <p>Qty: ${item.quantity} × ₹${item.price.toLocaleString('en-IN')}</p>
+              </div>
+              <div class="order-item-total">₹${(item.quantity * item.price).toLocaleString('en-IN')}</div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+      document.getElementById('orderModal').style.display = 'flex';
+    }
+
+    loadOrders();
+  </script>
+</body>
+</html>

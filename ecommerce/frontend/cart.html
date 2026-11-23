@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shopping Cart - ShopZone</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-container">
+      <a href="/" class="logo"><i class="fas fa-shopping-bag"></i> ShopZone</a>
+      <div class="nav-links">
+        <a href="/" class="nav-link"><i class="fas fa-home"></i> Home</a>
+        <a href="/cart.html" class="nav-link active"><i class="fas fa-shopping-cart"></i> Cart <span class="cart-badge" id="cartBadge">0</span></a>
+        <a href="/orders.html" class="nav-link" id="ordersLink" style="display:none"><i class="fas fa-box"></i> Orders</a>
+        <a href="/login.html" class="nav-link" id="loginLink"><i class="fas fa-sign-in-alt"></i> Login</a>
+        <div class="user-menu" id="userMenu" style="display:none">
+          <span id="userName"><i class="fas fa-user"></i> </span>
+          <button class="btn-logout" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Logout</button>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container" style="padding-top:30px">
+    <h1 class="page-title"><i class="fas fa-shopping-cart"></i> Shopping Cart</h1>
+    <div id="cartContainer">
+      <div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading cart...</div>
+    </div>
+  </div>
+
+  <!-- Checkout Modal -->
+  <div class="modal-overlay" id="checkoutModal" style="display:none">
+    <div class="modal">
+      <div class="modal-header">
+        <h2><i class="fas fa-map-marker-alt"></i> Shipping Details</h2>
+        <button onclick="closeModal()"><i class="fas fa-times"></i></button>
+      </div>
+      <form onsubmit="placeOrder(event)">
+        <div class="form-group">
+          <label>Full Name</label>
+          <input type="text" id="shippingName" required placeholder="Recipient's full name">
+        </div>
+        <div class="form-group">
+          <label>Address Line 1</label>
+          <input type="text" id="address1" required placeholder="House/Flat No., Street">
+        </div>
+        <div class="form-group">
+          <label>Address Line 2</label>
+          <input type="text" id="address2" placeholder="Area, Landmark (optional)">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>City</label>
+            <input type="text" id="city" required placeholder="City">
+          </div>
+          <div class="form-group">
+            <label>PIN Code</label>
+            <input type="text" id="pincode" required placeholder="6-digit PIN" pattern="[0-9]{6}" maxlength="6">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Phone Number</label>
+          <input type="tel" id="phone" required placeholder="10-digit mobile number" pattern="[0-9]{10}" maxlength="10">
+        </div>
+        <button type="submit" class="btn-auth">
+          <i class="fas fa-check-circle"></i> Place Order
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="/js/auth.js"></script>
+  <script src="/js/main.js"></script>
+  <script>
+    const token = localStorage.getItem('token');
+    if (!token) { window.location.href = '/login.html'; }
+
+    async function loadCart() {
+      const res = await fetch('/api/cart', { headers: { 'Authorization': `Bearer ${token}` } });
+      if (!res.ok) { document.getElementById('cartContainer').innerHTML = '<p class="error">Could not load cart.</p>'; return; }
+      const { items, total } = await res.json();
+
+      const container = document.getElementById('cartContainer');
+      if (!items.length) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <i class="fas fa-shopping-cart"></i>
+            <h3>Your cart is empty</h3>
+            <p>Start shopping to add items to your cart</p>
+            <a href="/" class="btn-auth"><i class="fas fa-shopping-bag"></i> Shop Now</a>
+          </div>`;
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="cart-layout">
+          <div class="cart-items">
+            ${items.map(item => `
+              <div class="cart-item" id="item-${item.id}">
+                <img src="${item.image_url}" alt="${item.name}" onerror="this.src='https://via.placeholder.com/80x80'">
+                <div class="cart-item-info">
+                  <h3>${item.name}</h3>
+                  <p class="item-price">₹${item.price.toLocaleString('en-IN')} each</p>
+                </div>
+                <div class="cart-item-qty">
+                  <button onclick="updateQty(${item.id}, ${item.quantity - 1})">-</button>
+                  <span>${item.quantity}</span>
+                  <button onclick="updateQty(${item.id}, ${item.quantity + 1})">+</button>
+                </div>
+                <div class="cart-item-subtotal">₹${item.subtotal.toLocaleString('en-IN')}</div>
+                <button class="remove-btn" onclick="removeItem(${item.id})"><i class="fas fa-trash"></i></button>
+              </div>
+            `).join('')}
+          </div>
+          <div class="cart-summary">
+            <h3>Order Summary</h3>
+            <div class="summary-row"><span>Items (${items.length})</span><span>₹${total.toLocaleString('en-IN')}</span></div>
+            <div class="summary-row"><span>Delivery</span><span class="free">FREE</span></div>
+            <div class="summary-total"><span>Total</span><span>₹${total.toLocaleString('en-IN')}</span></div>
+            <button class="btn-checkout" onclick="openCheckout()"><i class="fas fa-lock"></i> Proceed to Checkout</button>
+            <button class="btn-clear" onclick="clearCart()"><i class="fas fa-trash"></i> Clear Cart</button>
+          </div>
+        </div>`;
+      
+      updateCartBadge();
+    }
+
+    async function updateQty(itemId, newQty) {
+      if (newQty < 1) { removeItem(itemId); return; }
+      await fetch(`/api/cart/${itemId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ quantity: newQty })
+      });
+      loadCart();
+    }
+
+    async function removeItem(itemId) {
+      await fetch(`/api/cart/${itemId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+      showToast('Item removed', 'info');
+      loadCart();
+    }
+
+    async function clearCart() {
+      if (!confirm('Clear all items from cart?')) return;
+      await fetch('/api/cart', { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+      showToast('Cart cleared', 'info');
+      loadCart();
+    }
+
+    function openCheckout() {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      document.getElementById('shippingName').value = user.name || '';
+      document.getElementById('checkoutModal').style.display = 'flex';
+    }
+
+    function closeModal() {
+      document.getElementById('checkoutModal').style.display = 'none';
+    }
+
+    async function placeOrder(e) {
+      e.preventDefault();
+      const shipping_address = `${document.getElementById('shippingName').value}, ${document.getElementById('address1').value}, ${document.getElementById('address2').value ? document.getElementById('address2').value + ', ' : ''}${document.getElementById('city').value} - ${document.getElementById('pincode').value}, Ph: ${document.getElementById('phone').value}`;
+
+      const res = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ shipping_address })
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        closeModal();
+        showToast('Order placed successfully! 🎉', 'success');
+        setTimeout(() => window.location.href = '/orders.html', 1500);
+      } else {
+        showToast(data.error, 'error');
+      }
+    }
+
+    loadCart();
+  </script>
+</body>
+</html>

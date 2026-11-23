@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Product Details - ShopZone</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-container">
+      <a href="/" class="logo"><i class="fas fa-shopping-bag"></i> ShopZone</a>
+      <div class="nav-links">
+        <a href="/" class="nav-link"><i class="fas fa-home"></i> Home</a>
+        <a href="/cart.html" class="nav-link"><i class="fas fa-shopping-cart"></i> Cart <span class="cart-badge" id="cartBadge">0</span></a>
+        <a href="/orders.html" class="nav-link" id="ordersLink" style="display:none"><i class="fas fa-box"></i> Orders</a>
+        <a href="/login.html" class="nav-link" id="loginLink"><i class="fas fa-sign-in-alt"></i> Login</a>
+        <div class="user-menu" id="userMenu" style="display:none">
+          <span id="userName"><i class="fas fa-user"></i> </span>
+          <button class="btn-logout" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Logout</button>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container" style="padding-top:30px">
+    <a href="/" class="back-link"><i class="fas fa-arrow-left"></i> Back to Products</a>
+    <div id="productDetail" class="product-detail-container">
+      <div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading product...</div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="/js/auth.js"></script>
+  <script src="/js/main.js"></script>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const productId = params.get('id');
+
+    if (!productId) window.location.href = '/';
+
+    async function loadProduct() {
+      const res = await fetch(`/api/products/${productId}`);
+      if (!res.ok) { document.getElementById('productDetail').innerHTML = '<p class="error">Product not found.</p>'; return; }
+      const p = await res.json();
+
+      document.title = `${p.name} - ShopZone`;
+      document.getElementById('productDetail').innerHTML = `
+        <div class="product-detail">
+          <div class="detail-image">
+            <img src="${p.image_url}" alt="${p.name}" onerror="this.src='https://via.placeholder.com/600x400?text=No+Image'">
+          </div>
+          <div class="detail-info">
+            <span class="product-category">${p.category}</span>
+            <h1>${p.name}</h1>
+            <div class="detail-price">₹${p.price.toLocaleString('en-IN')}</div>
+            <p class="detail-description">${p.description || 'No description available.'}</p>
+            <div class="stock-info">
+              <i class="fas fa-box"></i> 
+              <span class="${p.stock > 0 ? 'in-stock' : 'out-stock'}">
+                ${p.stock > 0 ? `In Stock (${p.stock} available)` : 'Out of Stock'}
+              </span>
+            </div>
+            <div class="quantity-selector">
+              <label>Quantity:</label>
+              <div class="qty-controls">
+                <button onclick="changeQty(-1)">-</button>
+                <input type="number" id="qty" value="1" min="1" max="${p.stock}">
+                <button onclick="changeQty(1)">+</button>
+              </div>
+            </div>
+            <div class="detail-actions">
+              <button class="btn-add-cart-lg" onclick="addToCart(${p.id})" ${p.stock === 0 ? 'disabled' : ''}>
+                <i class="fas fa-cart-plus"></i> Add to Cart
+              </button>
+              <button class="btn-buy-now" onclick="buyNow(${p.id})" ${p.stock === 0 ? 'disabled' : ''}>
+                <i class="fas fa-bolt"></i> Buy Now
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function changeQty(delta) {
+      const input = document.getElementById('qty');
+      const newVal = parseInt(input.value) + delta;
+      if (newVal >= 1 && newVal <= parseInt(input.max)) input.value = newVal;
+    }
+
+    async function addToCart(productId) {
+      const token = localStorage.getItem('token');
+      if (!token) { showToast('Please login first', 'error'); setTimeout(() => window.location.href='/login.html', 1200); return; }
+      const qty = parseInt(document.getElementById('qty').value);
+      const res = await fetch('/api/cart', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ product_id: productId, quantity: qty })
+      });
+      const data = await res.json();
+      if (res.ok) { showToast('Added to cart!', 'success'); updateCartBadge(); }
+      else showToast(data.error, 'error');
+    }
+
+    async function buyNow(productId) {
+      await addToCart(productId);
+      setTimeout(() => window.location.href = '/cart.html', 800);
+    }
+
+    loadProduct();
+  </script>
+</body>
+</html>
